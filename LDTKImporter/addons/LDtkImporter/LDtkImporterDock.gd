@@ -4,7 +4,10 @@ extends Control
 onready var ldtkImportDialog = $LDtkFileImport
 onready var outputDirDialog = $OutputDir
 onready var outputDirTxt = $MarginContainer/VBoxContainer/ScrollContainer/VBoxContainer/HBoxContainer/HBoxContainer/OutputDirText
+onready var imageDirDialog = $ImageDir
+onready var imageDirTxt = $MarginContainer/VBoxContainer/ScrollContainer2/VBoxContainer/HBoxContainer/HBoxContainer/TextureImageText
 
+var imageDir = "res://"
 var outputDir = "res://"
 
 class LDtkTileset:
@@ -46,7 +49,10 @@ func _create_tilesets(ldtkTilesets, ldtkHomeDirectory, tilesetDirPath):
 		ldtkTileset.uid = tilesetData["uid"]
 		ldtkTileset.name = tilesetData["identifier"]
 		ldtkTileset.grid_size = tilesetData["tileGridSize"]
-		ldtkTileset.texture = load(ldtkHomeDirectory.plus_file(tilesetData["relPath"]))
+		if imageDir != "res://": #if we specified a image directory get image from there
+			ldtkTileset.texture = load(imageDir.plus_file(tilesetData["relPath"].get_file()))
+		else: #otherwise just use the path from the ldtk file
+			ldtkTileset.texture = load(ldtkHomeDirectory.plus_file(tilesetData["relPath"]))
 		ldtkTileset.path = tilesetDirPath.plus_file(tilesetData["identifier"]+".tres")
 		
 		if ResourceLoader.exists(ldtkTileset.path):
@@ -144,16 +150,21 @@ func _create_tile(tileId, region, texture, tileset):
 func _on_SelectDir_pressed():
 	outputDirDialog.popup_centered()
 
-
+func _on_SelectImageDir_pressed():
+	imageDirDialog.popup_centered()
+	
+func _on_ImageDir_dir_selected(dir):
+	imageDir = dir
+	imageDirTxt.text = imageDir
+	imageDirDialog.current_dir = imageDir
+	
 func _on_Import_pressed():
 	ldtkImportDialog.popup_centered()
-
 
 func _on_OutputDir_dir_selected(dir):
 	outputDir = dir
 	outputDirTxt.text = outputDir
 	outputDirDialog.current_dir = outputDir
-
 
 func _on_LDtkFileImport_file_selected(path):
 	var ldtkFile = File.new()
