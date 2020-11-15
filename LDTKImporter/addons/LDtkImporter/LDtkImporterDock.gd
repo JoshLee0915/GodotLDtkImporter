@@ -85,7 +85,9 @@ func _create_levels(levels, layersDef, tilesets, outputDir):
 		var rootNode = Node2D.new()
 		rootNode.name = level["identifier"]
 		
-		for layer in level["layerInstances"]:
+		var layers = level["layerInstances"];
+		layers.invert()
+		for layer in layers:
 			var layerNode = _create_layer(layer, layersDef, tilesets)
 			if layerNode:
 				rootNode.add_child(layerNode, true)
