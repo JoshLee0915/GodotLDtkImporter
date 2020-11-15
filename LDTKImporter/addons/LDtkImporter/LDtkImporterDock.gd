@@ -97,14 +97,17 @@ func _create_levels(levels, layersDef, tilesets, outputDir):
 			rootNode.add_child(layerRootNode, true)
 			layerRootNode.owner = rootNode
 		
-		var layers = level["layerInstances"];
-		layers.invert()
-		for layer in layers:
+		for layer in level["layerInstances"]:
 			var loadedLayerNode = layerRootNode.get_node_or_null(layer["__identifier"])
 			var layerNode = _create_layer(layer, layersDef, tilesets, loadedLayerNode)
+			
+			# Inital node setup
 			if loadedLayerNode == null && layerNode:
 				layerRootNode.add_child(layerNode, true)
 				layerNode.owner = rootNode
+			
+			if layerNode:
+				layerRootNode.move_child(layerNode,0)
 			
 		if layerRootNode.get_child_count() > 0:
 			var scene = PackedScene.new()
