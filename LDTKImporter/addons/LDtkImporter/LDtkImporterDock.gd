@@ -85,15 +85,20 @@ func _create_levels(levels, layersDef, tilesets, outputDir):
 		var rootNode = Node2D.new()
 		rootNode.name = level["identifier"]
 		
+		var layerRootNode = Node2D.new()
+		layerRootNode.name = "Layers"
+		rootNode.add_child(layerRootNode)
+		layerRootNode.owner = rootNode
+		
 		var layers = level["layerInstances"];
 		layers.invert()
 		for layer in layers:
 			var layerNode = _create_layer(layer, layersDef, tilesets)
 			if layerNode:
-				rootNode.add_child(layerNode, true)
+				layerRootNode.add_child(layerNode, true)
 				layerNode.owner = rootNode
 			
-		if rootNode.get_child_count() > 0:
+		if layerRootNode.get_child_count() > 0:
 			var scene = PackedScene.new()
 			scene.pack(rootNode)
 			
