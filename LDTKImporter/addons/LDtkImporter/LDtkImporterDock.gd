@@ -82,19 +82,28 @@ func _load_layer_defs(ldtkLayerDef):
 	
 func _create_levels(levels, layersDef, tilesets, outputDir):
 	for level in levels:
-		var rootNode = Node2D.new()
+		var sceneFile = outputDir.plus_file(level["identifier"]+".tscn")
+		
+		var rootNode = null
+		if ResourceLoader.exists(sceneFile):
+			rootNode = ResourceLoader.load(sceneFile).instance()
+		else:
+			rootNode = Node2D.new()
 		rootNode.name = level["identifier"]
 		
-		var layerRootNode = Node2D.new()
-		layerRootNode.name = "Layers"
-		rootNode.add_child(layerRootNode)
-		layerRootNode.owner = rootNode
+		var layerRootNode = rootNode.get_node_or_null("Layers")
+		if layerRootNode == null:
+			layerRootNode = Node2D.new()
+			layerRootNode.name = "Layers"
+			rootNode.add_child(layerRootNode, true)
+			layerRootNode.owner = rootNode
 		
 		var layers = level["layerInstances"];
 		layers.invert()
 		for layer in layers:
-			var layerNode = _create_layer(layer, layersDef, tilesets)
-			if layerNode:
+			var loadedLayerNode = layerRootNode.get_node_or_null(layer["__identifier"])
+			var layerNode = _create_layer(layer, layersDef, tilesets, loadedLayerNode)
+			if loadedLayerNode == null && layerNode:
 				layerRootNode.add_child(layerNode, true)
 				layerNode.owner = rootNode
 			
@@ -102,14 +111,13 @@ func _create_levels(levels, layersDef, tilesets, outputDir):
 			var scene = PackedScene.new()
 			scene.pack(rootNode)
 			
-			var outputFile = outputDir.plus_file(rootNode.name+".tscn")
-			ResourceSaver.save(outputFile, scene)
+			ResourceSaver.save(sceneFile, scene)
 		
 	# Save changes to the tilesets
 	for tileset in tilesets.values():
 		ResourceSaver.save(tileset.path, tileset.tileset)
 	
-func _create_layer(layer, layersDef, tilesets):
+func _create_layer(layer, layersDef, tilesets, tilemap):
 	var tiles = layer["autoLayerTiles"]
 	if len(tiles) <= 0:
 		tiles = layer["gridTiles"]
@@ -126,7 +134,8 @@ func _create_layer(layer, layersDef, tilesets):
 	else:
 		return null		# No need to create layer if there is no tileset
 	
-	var tilemap = TileMap.new()
+	if tilemap==null:
+		tilemap = TileMap.new()
 	tilemap.name = layer["__identifier"]
 	tilemap.modulate.a = layer["__opacity"]
 	tilemap.cell_size = Vector2(layerDef.grid_size, layerDef.grid_size)
