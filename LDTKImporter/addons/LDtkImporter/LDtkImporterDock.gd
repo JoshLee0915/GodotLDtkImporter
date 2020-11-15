@@ -61,7 +61,6 @@ func _create_tilesets(ldtkTilesets, ldtkHomeDirectory, tilesetDirPath):
 			ldtkTileset.tileset = ResourceLoader.load(ldtkTileset.path)
 		else:
 			ldtkTileset.tileset = TileSet.new()
-			ResourceSaver.save(ldtkTileset.path, ldtkTileset.tileset)
 		
 		tilesetDict[ldtkTileset.uid] = ldtkTileset
 		
@@ -115,7 +114,8 @@ func _create_levels(levels, layersDef, tilesets, outputDir):
 		
 	# Save changes to the tilesets
 	for tileset in tilesets.values():
-		ResourceSaver.save(tileset.path, tileset.tileset)
+		if len(tileset.tileset.get_tiles_ids()) > 0:
+			ResourceSaver.save(tileset.path, tileset.tileset)
 	
 func _create_layer(layer, layersDef, tilesets, tilemap):
 	var tiles = layer["autoLayerTiles"]

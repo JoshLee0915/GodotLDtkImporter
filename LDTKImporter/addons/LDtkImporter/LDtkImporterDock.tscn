@@ -75,6 +75,7 @@ margin_bottom = 24.0
 margin_right = 150.0
 margin_bottom = 24.0
 rect_min_size = Vector2( 150, 0 )
+text = "res://"
 editable = false
 
 [node name="SelectDir" type="Button" parent="MarginContainer/VBoxContainer/ScrollContainer/VBoxContainer/HBoxContainer/HBoxContainer"]
