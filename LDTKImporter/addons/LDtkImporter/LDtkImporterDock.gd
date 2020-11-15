@@ -42,11 +42,19 @@ func _create_assets(projectName, ldtkDefs, ldtkLevels, ldtkHomeDirectory):
 func _create_tilesets(ldtkTilesets, ldtkHomeDirectory, tilesetDirPath):
 	var tilesetDict = {}
 	for tilesetData in ldtkTilesets:
+		# Assume realtive path as this will be the most common case
+		var texturePath = ldtkHomeDirectory.plus_file(tilesetData["relPath"])
+		
+		# Check for an absolute path. 
+		# This should only happen if the user selected an image on a diffrent drive
+		if tilesetData["relPath"].is_abs_path():
+			texturePath = tilesetData["relPath"]
+		
 		var ldtkTileset = LDtkTileset.new()
 		ldtkTileset.uid = tilesetData["uid"]
 		ldtkTileset.name = tilesetData["identifier"]
 		ldtkTileset.grid_size = tilesetData["tileGridSize"]
-		ldtkTileset.texture = load(ldtkHomeDirectory.plus_file(tilesetData["relPath"]))
+		ldtkTileset.texture = load(texturePath)
 		ldtkTileset.path = tilesetDirPath.plus_file(tilesetData["identifier"]+".tres")
 		
 		if ResourceLoader.exists(ldtkTileset.path):
