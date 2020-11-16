@@ -115,7 +115,7 @@ func _create_levels(levels, layersDef, tilesets, outputDir):
 				
 				entitiesRootNode.move_child(entityLayer, 0)
 				for entityInstance in layer["entityInstances"]:
-					var entityNode = entitiesRootNode.get_node_or_null(entityInstance["__identifier"])
+					var entityNode = entityLayer.get_node_or_null(entityInstance["__identifier"])
 					var entity = _create_entity(entityInstance, entityNode, rootNode)
 					
 					if entityNode == null && entity:
@@ -149,47 +149,22 @@ func _create_levels(levels, layersDef, tilesets, outputDir):
 			
 func _create_entity(entity, entityNode, rootNode):
 	# Check if we need to create the entity node
-	var nodeClass = null
-	var scene = null
+	var node = null
 	
 	for field in entity["fieldInstances"]:
 		if field["__identifier"] == "_Node":
-			nodeClass = field["__value"]
-		elif field["__identifier"] == "_Scene":
-			scene = field["__value"]
+			node = field["__value"]
 			
-		if nodeClass && scene:
+		if node:
 			break
 			
 	# Create a new node
 	if entityNode == null:
-		if nodeClass && ClassDB.can_instance(nodeClass):
-			entityNode = ClassDB.instance(nodeClass)
-			
-		var sceneRootNode = _find_and_load_scene(scene)
-		if entityNode && sceneRootNode:
-			entityNode.add_child(sceneRootNode, true)
-			sceneRootNode.owner = rootNode
-		elif sceneRootNode:
-			entityNode = sceneRootNode
+		entityNode = _find_and_load_scene(node)
+		
+		if entityNode == null && node && ClassDB.can_instance(node):
+			entityNode = ClassDB.instance(node)
 
-	# Check if we need to recreate the nodes if their type changed
-	else:
-		var sceneRootNode = _find_and_load_scene(scene)
-		var sceneRootNodeType = null
-		if sceneRootNode:
-			sceneRootNodeType = sceneRootNode.get_type()
-			
-		# TODO: rework to prevent child nodes from getting wipped if the type changes
-		if entityNode.get_type() != nodeClass && entityNode.get_type() != sceneRootNodeType:
-			if nodeClass && ClassDB.can_instance(nodeClass):
-				entityNode = ClassDB.instance(nodeClass)
-
-			if entityNode && sceneRootNode:
-				entityNode.add_child(sceneRootNode, true)
-				sceneRootNode.owner = rootNode
-			elif sceneRootNode:
-				entityNode = sceneRootNode
 				
 	if entityNode && entityNode.has_method("load_ldtk_entity"):
 		entityNode.load_ldtk_entity(entity)
@@ -226,11 +201,32 @@ func _create_entity(entity, entityNode, rootNode):
 	
 	return entityNode
 	
-func _find_and_load_scene(scene):
+func _find_and_load_scene(scene, dir="res://"):
 	if scene == null:
 		return null
 		
-	return null
+	var directory = Directory.new()
+	if directory.open(dir) != OK:
+		push_error("Could not open "+dir)
+		return null
+	
+	if directory.list_dir_begin(true) != OK:
+		push_error("Could not list contents of "+dir)
+		return null
+		
+	var sceneNode = null
+	var fileName = directory.get_next()
+	while fileName && sceneNode == null:
+		var fullPath = dir.plus_file(fileName)
+		if directory.current_is_dir():
+			sceneNode = _find_and_load_scene(scene, fullPath)
+		elif scene in fullPath:
+			sceneNode = ResourceLoader.load(fullPath).instance()
+		fileName = directory.get_next()
+	
+	directory.list_dir_end()
+		
+	return sceneNode
 	
 func _create_layer(layer, layersDef, tilesets, tilemap):
 	var tiles = layer["autoLayerTiles"]
