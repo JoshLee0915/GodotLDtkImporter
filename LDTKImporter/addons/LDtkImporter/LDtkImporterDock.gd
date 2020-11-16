@@ -90,6 +90,13 @@ func _create_levels(levels, layersDef, tilesets, outputDir):
 			rootNode = Node2D.new()
 		rootNode.name = level["identifier"]
 		
+		var entitiesRootNode = rootNode.get_node_or_null("Entities")
+		if entitiesRootNode == null:
+			entitiesRootNode = Node2D.new()
+			entitiesRootNode.name = "Entities"
+			rootNode.add_child(entitiesRootNode, true)
+			entitiesRootNode.owner = rootNode
+		
 		var layerRootNode = rootNode.get_node_or_null("Layers")
 		if layerRootNode == null:
 			layerRootNode = Node2D.new()
@@ -98,18 +105,38 @@ func _create_levels(levels, layersDef, tilesets, outputDir):
 			layerRootNode.owner = rootNode
 		
 		for layer in level["layerInstances"]:
-			var loadedLayerNode = layerRootNode.get_node_or_null(layer["__identifier"])
-			var layerNode = _create_layer(layer, layersDef, tilesets, loadedLayerNode)
+			if layer["__type"] == "Entities":
+				var entityLayer = entitiesRootNode.get_node_or_null(layer["__identifier"])
+				if entityLayer == null:
+					entityLayer = Node2D.new()
+					entityLayer.name = layer["__identifier"]
+					entitiesRootNode.add_child(entityLayer, true)
+					entityLayer.owner = rootNode
+				
+				entitiesRootNode.move_child(entityLayer, 0)
+				for entityInstance in layer["entityInstances"]:
+					var entityNode = entitiesRootNode.get_node_or_null(entityInstance["__identifier"])
+					var entity = _create_entity(entityInstance, entityNode, rootNode)
+					
+					if entityNode == null && entity:
+						entityLayer.add_child(entity, true)
+						entity.owner = rootNode
+					
+					if entity:
+						entityLayer.move_child(entity, 0)
+			else:
+				var loadedLayerNode = layerRootNode.get_node_or_null(layer["__identifier"])
+				var layerNode = _create_layer(layer, layersDef, tilesets, loadedLayerNode)
+				
+				# Inital node setup
+				if loadedLayerNode == null && layerNode:
+					layerRootNode.add_child(layerNode, true)
+					layerNode.owner = rootNode
+				
+				if layerNode:
+					layerRootNode.move_child(layerNode,0)
 			
-			# Inital node setup
-			if loadedLayerNode == null && layerNode:
-				layerRootNode.add_child(layerNode, true)
-				layerNode.owner = rootNode
-			
-			if layerNode:
-				layerRootNode.move_child(layerNode,0)
-			
-		if layerRootNode.get_child_count() > 0:
+		if layerRootNode.get_child_count() > 0 || entitiesRootNode.get_child_count() > 0:
 			var scene = PackedScene.new()
 			scene.pack(rootNode)
 			
@@ -119,6 +146,91 @@ func _create_levels(levels, layersDef, tilesets, outputDir):
 	for tileset in tilesets.values():
 		if len(tileset.tileset.get_tiles_ids()) > 0:
 			ResourceSaver.save(tileset.path, tileset.tileset)
+			
+func _create_entity(entity, entityNode, rootNode):
+	# Check if we need to create the entity node
+	var nodeClass = null
+	var scene = null
+	
+	for field in entity["fieldInstances"]:
+		if field["__identifier"] == "_Node":
+			nodeClass = field["__value"]
+		elif field["__identifier"] == "_Scene":
+			scene = field["__value"]
+			
+		if nodeClass && scene:
+			break
+			
+	# Create a new node
+	if entityNode == null:
+		if nodeClass && ClassDB.can_instance(nodeClass):
+			entityNode = ClassDB.instance(nodeClass)
+			
+		var sceneRootNode = _find_and_load_scene(scene)
+		if entityNode && sceneRootNode:
+			entityNode.add_child(sceneRootNode, true)
+			sceneRootNode.owner = rootNode
+		elif sceneRootNode:
+			entityNode = sceneRootNode
+
+	# Check if we need to recreate the nodes if their type changed
+	else:
+		var sceneRootNode = _find_and_load_scene(scene)
+		var sceneRootNodeType = null
+		if sceneRootNode:
+			sceneRootNodeType = sceneRootNode.get_type()
+			
+		# TODO: rework to prevent child nodes from getting wipped if the type changes
+		if entityNode.get_type() != nodeClass && entityNode.get_type() != sceneRootNodeType:
+			if nodeClass && ClassDB.can_instance(nodeClass):
+				entityNode = ClassDB.instance(nodeClass)
+
+			if entityNode && sceneRootNode:
+				entityNode.add_child(sceneRootNode, true)
+				sceneRootNode.owner = rootNode
+			elif sceneRootNode:
+				entityNode = sceneRootNode
+				
+	if entityNode && entityNode.has_method("load_ldtk_entity"):
+		entityNode.load_ldtk_entity(entity)
+	elif entityNode:
+		entityNode.name = entity["__identifier"]
+		entityNode.position = Vector2(entity["px"][0],entity["px"][1])
+		for field in entity["fieldInstances"]:
+			if field["__identifier"] == "_Node" || field["__identifier"] == "_Scene":
+				continue
+			
+			var fieldName = field["__identifier"]
+			var fieldValue = field["__value"]
+			var fieldType = field["__type"]
+			
+			if "Point" in fieldType:
+				if typeof(fieldValue) == TYPE_ARRAY:
+					var newArray = []
+					for value in fieldValue:
+						newArray.append(Vector2(value["cx"], value["cy"]))
+					fieldValue = newArray
+				else:
+					fieldValue = Vector2(fieldValue["cx"], fieldValue["cy"])
+			elif "Color" in fieldType:
+				if typeof(fieldValue) == TYPE_ARRAY:
+					var newArray = []
+					for value in fieldValue:
+						newArray.append(Color(value))
+					fieldValue = newArray
+				else:
+					fieldValue = Color(fieldValue)
+			
+			if not entityNode.set(fieldName, fieldValue):
+				push_warning("Field "+fieldName+" does not exsist")
+	
+	return entityNode
+	
+func _find_and_load_scene(scene):
+	if scene == null:
+		return null
+		
+	return null
 	
 func _create_layer(layer, layersDef, tilesets, tilemap):
 	var tiles = layer["autoLayerTiles"]
