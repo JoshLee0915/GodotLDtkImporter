@@ -161,16 +161,31 @@ func _create_entity(entity, entityNode, rootNode):
 	# Create a new node
 	if entityNode == null:
 		entityNode = _find_and_load_scene(node)
-		
 		if entityNode == null && node && ClassDB.can_instance(node):
 			entityNode = ClassDB.instance(node)
+			
+		if entityNode == null:
+			push_error("Can not instance node "+node+". Skipping creating node")
+	else:
+		var updatedNode = _find_and_load_scene(node)
+		if updatedNode == null && node && ClassDB.can_instance(node):
+			updatedNode = ClassDB.instance(node)
+			
+		if updatedNode && (entityNode.get_class() != updatedNode.get_class() || entityNode.filename != updatedNode.filename):
+			entityNode.free()
+			entityNode = updatedNode
+			
+		if updatedNode == null:
+			push_error("Can not instance node "+node+". Skipping type update")
 
 				
 	if entityNode && entityNode.has_method("load_ldtk_entity"):
 		entityNode.load_ldtk_entity(entity)
 	elif entityNode:
 		entityNode.name = entity["__identifier"]
-		entityNode.position = Vector2(entity["px"][0],entity["px"][1])
+		if not entityNode.set("position", Vector2(entity["px"][0],entity["px"][1])):
+			push_warning("No position field on this node")
+		
 		for field in entity["fieldInstances"]:
 			if field["__identifier"] == "_Node" || field["__identifier"] == "_Scene":
 				continue
@@ -220,6 +235,8 @@ func _find_and_load_scene(scene, dir="res://"):
 		var fullPath = dir.plus_file(fileName)
 		if directory.current_is_dir():
 			sceneNode = _find_and_load_scene(scene, fullPath)
+		# TODO: Should find a better way to do this as there is a high possiblity
+		# of accidentally loading the wrong file
 		elif scene in fullPath:
 			sceneNode = ResourceLoader.load(fullPath).instance()
 		fileName = directory.get_next()
