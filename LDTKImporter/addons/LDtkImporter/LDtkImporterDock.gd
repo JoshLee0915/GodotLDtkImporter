@@ -158,16 +158,20 @@ func _create_entity(entity, entityNode, rootNode):
 		if node:
 			break
 			
+	var sceneFile = node
+	if not sceneFile.get_extension():
+		sceneFile = sceneFile+".tscn"
+			
 	# Create a new node
-	if entityNode == null:
-		entityNode = _find_and_load_scene(node)
+	if entityNode == null:			
+		entityNode = _find_and_load_scene(sceneFile)
 		if entityNode == null && node && ClassDB.can_instance(node):
 			entityNode = ClassDB.instance(node)
 			
 		if entityNode == null:
 			push_error("Can not instance node "+node+". Skipping creating node")
-	else:
-		var updatedNode = _find_and_load_scene(node)
+	else:		
+		var updatedNode = _find_and_load_scene(sceneFile)
 		if updatedNode == null && node && ClassDB.can_instance(node):
 			updatedNode = ClassDB.instance(node)
 			
