@@ -1,11 +1,4 @@
-tool
-extends Control
-
-onready var ldtkImportDialog = $LDtkFileImport
-onready var outputDirDialog = $OutputDir
-onready var outputDirTxt = $MarginContainer/VBoxContainer/ScrollContainer/VBoxContainer/HBoxContainer/HBoxContainer/OutputDirText
-
-var outputDir = "res://"
+extends Object
 
 class LDtkTileset:
 	var uid
@@ -20,27 +13,27 @@ class LDtkLayer:
 	var grid_size
 	var tileset_uid
 	var auto_tileset_uid
+	
+func load_ldtk_file(ldtkFilePath):
+	var ldtkFile = File.new()
+	var err = ldtkFile.open(ldtkFilePath, File.READ)
+	if err != OK:
+		return {"error": err}
+		
+	var parsedLDtk = JSON.parse(ldtkFile.get_as_text())
+	if parsedLDtk.error != OK:
+		return {"error": parsedLDtk.error}
+		
+	return {
+		"error": OK, 
+		"result": parsedLDtk.result, 
+		"defs": parsedLDtk.result["defs"],
+		"levels": parsedLDtk.result["levels"]
+	}
 
-# Called when the node enters the scene tree for the first time.
-func _ready():
-	outputDirTxt.text = outputDir
-	outputDirDialog.current_dir = outputDir
-
-func _create_assets(projectName, ldtkDefs, ldtkLevels, ldtkHomeDirectory):
-	var projectOutputDir = outputDir.plus_file(projectName)
-	var tilesetDirPath = projectOutputDir.plus_file("/tilesets/")
-	
-	var tilesetDir = Directory.new()
-	if !tilesetDir.dir_exists(tilesetDirPath):
-		tilesetDir.make_dir_recursive(tilesetDirPath)
-	
-	var tilesets = _create_tilesets(ldtkDefs["tilesets"], ldtkHomeDirectory, tilesetDirPath)
-	var layerDefs = _load_layer_defs(ldtkDefs["layers"])
-	
-	_create_levels(ldtkLevels, layerDefs, tilesets, projectOutputDir)
-	
-func _create_tilesets(ldtkTilesets, ldtkHomeDirectory, tilesetDirPath):
+func load_tilesets(ldtkDefsData, ldtkHomeDirectory, tilesetDirPath):
 	var tilesetDict = {}
+	var ldtkTilesets = ldtkDefsData["tilesets"]
 	for tilesetData in ldtkTilesets:
 		# Assume realtive path as this will be the most common case
 		var texturePath = ldtkHomeDirectory.plus_file(tilesetData["relPath"])
@@ -57,17 +50,20 @@ func _create_tilesets(ldtkTilesets, ldtkHomeDirectory, tilesetDirPath):
 		ldtkTileset.texture = load(texturePath)
 		ldtkTileset.path = tilesetDirPath.plus_file(tilesetData["identifier"]+".tres")
 		
-		if ResourceLoader.exists(ldtkTileset.path):
-			ldtkTileset.tileset = ResourceLoader.load(ldtkTileset.path)
-		else:
-			ldtkTileset.tileset = TileSet.new()
+		# Just saving every tileset if they are used or not to deal with
+		# ensureing the levels use the saved and not in memory tilesets
+		if !ResourceLoader.exists(ldtkTileset.path):
+			var tileset = TileSet.new()
+			ResourceSaver.save(ldtkTileset.path, tileset)
 		
+		ldtkTileset.tileset = ResourceLoader.load(ldtkTileset.path)
 		tilesetDict[ldtkTileset.uid] = ldtkTileset
 		
 	return tilesetDict
 	
-func _load_layer_defs(ldtkLayerDef):
+func load_layer_defs(ldtkDefsData):
 	var layerDict = {}
+	var ldtkLayerDef = ldtkDefsData["layers"]
 	for layer in ldtkLayerDef:
 		var ldtkLayer = LDtkLayer.new()
 		ldtkLayer.uid = layer["uid"]
@@ -79,73 +75,70 @@ func _load_layer_defs(ldtkLayerDef):
 		
 	return layerDict
 	
-func _create_levels(levels, layersDef, tilesets, outputDir):
-	for level in levels:
-		var sceneFile = outputDir.plus_file(level["identifier"]+".tscn")
-		
-		var rootNode = null
-		if ResourceLoader.exists(sceneFile):
-			rootNode = ResourceLoader.load(sceneFile).instance()
+func generate_level(level, layersDef, tilesets, outputDir, extension):
+	var sceneFile = outputDir.plus_file(level["identifier"]+"."+extension)
+	
+	var rootNode = null
+	if ResourceLoader.exists(sceneFile):
+		rootNode = ResourceLoader.load(sceneFile).instance()
+	else:
+		rootNode = Node2D.new()
+	rootNode.name = level["identifier"]
+	
+	var entitiesRootNode = rootNode.get_node_or_null("Entities")
+	if entitiesRootNode == null:
+		entitiesRootNode = Node2D.new()
+		entitiesRootNode.name = "Entities"
+		rootNode.add_child(entitiesRootNode, true)
+		entitiesRootNode.owner = rootNode
+	
+	var layerRootNode = rootNode.get_node_or_null("Layers")
+	if layerRootNode == null:
+		layerRootNode = Node2D.new()
+		layerRootNode.name = "Layers"
+		rootNode.add_child(layerRootNode, true)
+		layerRootNode.owner = rootNode
+	
+	for layer in level["layerInstances"]:
+		if layer["__type"] == "Entities":
+			var entityLayer = entitiesRootNode.get_node_or_null(layer["__identifier"])
+			if entityLayer == null:
+				entityLayer = Node2D.new()
+				entityLayer.name = layer["__identifier"]
+				entitiesRootNode.add_child(entityLayer, true)
+				entityLayer.owner = rootNode
+			
+			entitiesRootNode.move_child(entityLayer, 0)
+			for entityInstance in layer["entityInstances"]:
+				var entityNode = entityLayer.get_node_or_null(entityInstance["__identifier"])
+				var entity = _create_entity(entityInstance, entityNode, rootNode)
+				
+				if entityNode == null && entity:
+					entityLayer.add_child(entity, true)
+					entity.owner = rootNode
+				
+				if entity:
+					entityLayer.move_child(entity, 0)
 		else:
-			rootNode = Node2D.new()
-		rootNode.name = level["identifier"]
-		
-		var entitiesRootNode = rootNode.get_node_or_null("Entities")
-		if entitiesRootNode == null:
-			entitiesRootNode = Node2D.new()
-			entitiesRootNode.name = "Entities"
-			rootNode.add_child(entitiesRootNode, true)
-			entitiesRootNode.owner = rootNode
-		
-		var layerRootNode = rootNode.get_node_or_null("Layers")
-		if layerRootNode == null:
-			layerRootNode = Node2D.new()
-			layerRootNode.name = "Layers"
-			rootNode.add_child(layerRootNode, true)
-			layerRootNode.owner = rootNode
-		
-		for layer in level["layerInstances"]:
-			if layer["__type"] == "Entities":
-				var entityLayer = entitiesRootNode.get_node_or_null(layer["__identifier"])
-				if entityLayer == null:
-					entityLayer = Node2D.new()
-					entityLayer.name = layer["__identifier"]
-					entitiesRootNode.add_child(entityLayer, true)
-					entityLayer.owner = rootNode
-				
-				entitiesRootNode.move_child(entityLayer, 0)
-				for entityInstance in layer["entityInstances"]:
-					var entityNode = entityLayer.get_node_or_null(entityInstance["__identifier"])
-					var entity = _create_entity(entityInstance, entityNode, rootNode)
-					
-					if entityNode == null && entity:
-						entityLayer.add_child(entity, true)
-						entity.owner = rootNode
-					
-					if entity:
-						entityLayer.move_child(entity, 0)
-			else:
-				var loadedLayerNode = layerRootNode.get_node_or_null(layer["__identifier"])
-				var layerNode = _create_layer(layer, layersDef, tilesets, loadedLayerNode)
-				
-				# Inital node setup
-				if loadedLayerNode == null && layerNode:
-					layerRootNode.add_child(layerNode, true)
-					layerNode.owner = rootNode
-				
-				if layerNode:
-					layerRootNode.move_child(layerNode,0)
+			var loadedLayerNode = layerRootNode.get_node_or_null(layer["__identifier"])
+			var layerNode = _create_layer(layer, layersDef, tilesets, loadedLayerNode)
 			
-		if layerRootNode.get_child_count() > 0 || entitiesRootNode.get_child_count() > 0:
-			var scene = PackedScene.new()
-			scene.pack(rootNode)
+			# Inital node setup
+			if loadedLayerNode == null && layerNode:
+				layerRootNode.add_child(layerNode, true)
+				layerNode.owner = rootNode
 			
-			ResourceSaver.save(sceneFile, scene)
+			if layerNode:
+				layerRootNode.move_child(layerNode,0)
 		
-	# Save changes to the tilesets
-	for tileset in tilesets.values():
-		if len(tileset.tileset.get_tiles_ids()) > 0:
-			ResourceSaver.save(tileset.path, tileset.tileset)
+	if layerRootNode.get_child_count() > 0 || entitiesRootNode.get_child_count() > 0:
+		var scene = PackedScene.new()
+		scene.pack(rootNode)
+		
+		ResourceSaver.save(sceneFile, scene)
+		return sceneFile
+		
+	return null
 			
 func _create_entity(entity, entityNode, rootNode):
 	# Check if we need to create the entity node
@@ -296,26 +289,3 @@ func _create_tile(tileId, region, texture, tileset):
 	tileset.tile_set_tile_mode(tileId, TileSet.SINGLE_TILE)
 	tileset.tile_set_texture(tileId, texture)
 	tileset.tile_set_region(tileId, region)
-
-func _on_SelectDir_pressed():
-	outputDirDialog.popup_centered()
-
-
-func _on_Import_pressed():
-	ldtkImportDialog.popup_centered()
-
-
-func _on_OutputDir_dir_selected(dir):
-	outputDir = dir
-	outputDirTxt.text = outputDir
-	outputDirDialog.current_dir = outputDir
-
-
-func _on_LDtkFileImport_file_selected(path):
-	var ldtkFile = File.new()
-	ldtkFile.open(path, File.READ)
-	var parsedLDtk = JSON.parse(ldtkFile.get_as_text())
-	ldtkFile.close()
-	
-	if parsedLDtk.error == OK:
-		_create_assets(path.get_file().split(".")[0], parsedLDtk.result["defs"], parsedLDtk.result["levels"], path.get_base_dir())
