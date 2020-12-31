@@ -1,13 +1,13 @@
 tool
 extends EditorPlugin
 
-var dock
+var import_plugin
 
 func _enter_tree():
-	dock = preload("res://addons/LDtkImporter/LDtkImporterDock.tscn").instance()
-	add_control_to_dock(EditorPlugin.DOCK_SLOT_LEFT_UR, dock)
+	import_plugin = preload("LDtkImportPlugin.gd").new()
+	add_import_plugin(import_plugin)
 
 
 func _exit_tree():
-	remove_control_from_docks(dock)
-	dock.free()
+	remove_import_plugin(import_plugin)
+	import_plugin = null
