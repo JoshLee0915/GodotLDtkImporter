@@ -269,7 +269,7 @@ func _create_layer(layer, layersDef, tilesets, tilemap):
 	for tile in tiles:
 		var tilePos = Vector2(tile["src"][0], tile["src"][1])
 		var region = Rect2(tilePos, tilemap.cell_size)
-		var tileId = tile["d"].back()
+		var tileId = tile["t"]
 		_create_tile(tileId, region, tileset.texture, tileset.tileset)
 		
 		var worldPos = Vector2(tile["px"][0], tile["px"][1])
