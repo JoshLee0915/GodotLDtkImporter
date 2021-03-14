@@ -13,20 +13,20 @@ func get_recognized_extensions():
 	return ["ldtk"]
 	
 func get_save_extension():
-	return "tscn"
+	return ""
 	
 func get_resource_type():
-	return "Scenes"
+	return "TextFile"
 	
 func get_import_options(preset):
 	return []
 	
-func import(source_file, save_path, options, platform_variants, gen_files):
+func import(source_file, save_path, options, r_platform_variants, r_gen_files):
 	importEngine = preload("ImportEngine.gd").new()
 	var ldtkFile = importEngine.load_ldtk_file(source_file)
 	if ldtkFile.error != OK:
 		return ldtkFile.error
-		
+
 	save_path = source_file.get_basename()
 	var tilsetPath = save_path.plus_file("tilesets")
 	
@@ -35,17 +35,19 @@ func import(source_file, save_path, options, platform_variants, gen_files):
 		var error = directory.make_dir_recursive(tilsetPath)
 		if error != OK:
 			return error
-		
+
 	var layerDefs = importEngine.load_layer_defs(ldtkFile.defs)
 	var tilesets = importEngine.load_tilesets(ldtkFile.defs, source_file.get_base_dir(), tilsetPath)
 	
 	for level in ldtkFile.levels:
-		var scenePath = importEngine.generate_level(level, layerDefs, tilesets, save_path, get_save_extension())
+		var scenePath = importEngine.generate_level(level, layerDefs, tilesets, save_path)
 		if scenePath:
-			gen_files.append(scenePath)
-			
+			r_gen_files.append(scenePath)
+
 	for tileset in tilesets.values():
 		if ResourceSaver.save(tileset.path, tileset.tileset) == OK:
-			gen_files.append(tileset.path)
-	
+			r_gen_files.append(tileset.path)
+		else:
+			print_debug("error saving tileset file")
+
 	return OK

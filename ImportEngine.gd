@@ -19,14 +19,16 @@ func load_ldtk_file(ldtkFilePath):
 	var err = ldtkFile.open(ldtkFilePath, File.READ)
 	if err != OK:
 		return {"error": err}
-		
 	var parsedLDtk = JSON.parse(ldtkFile.get_as_text())
 	if parsedLDtk.error != OK:
+		ldtkFile.close()
 		return {"error": parsedLDtk.error}
-		
+
+	ldtkFile.close()
+	
 	return {
-		"error": OK, 
-		"result": parsedLDtk.result, 
+		"error": OK,
+		"result": parsedLDtk.result,
 		"defs": parsedLDtk.result["defs"],
 		"levels": parsedLDtk.result["levels"]
 	}
@@ -37,28 +39,29 @@ func load_tilesets(ldtkDefsData, ldtkHomeDirectory, tilesetDirPath):
 	for tilesetData in ldtkTilesets:
 		# Assume realtive path as this will be the most common case
 		var texturePath = ldtkHomeDirectory.plus_file(tilesetData["relPath"])
-		
+
 		# Check for an absolute path. 
 		# This should only happen if the user selected an image on a diffrent drive
 		if tilesetData["relPath"].is_abs_path():
 			texturePath = tilesetData["relPath"]
-		
+
 		var ldtkTileset = LDtkTileset.new()
 		ldtkTileset.uid = tilesetData["uid"]
 		ldtkTileset.name = tilesetData["identifier"]
 		ldtkTileset.grid_size = tilesetData["tileGridSize"]
 		ldtkTileset.texture = load(texturePath)
 		ldtkTileset.path = tilesetDirPath.plus_file(tilesetData["identifier"]+".tres")
-		
+
 		# Just saving every tileset if they are used or not to deal with
 		# ensureing the levels use the saved and not in memory tilesets
 		if !ResourceLoader.exists(ldtkTileset.path):
 			var tileset = TileSet.new()
-			ResourceSaver.save(ldtkTileset.path, tileset)
-		
+			if ResourceSaver.save(ldtkTileset.path, tileset) != 0:
+				print_debug("error saving tileset '", ldtkTileset.path, "'")
+
 		ldtkTileset.tileset = ResourceLoader.load(ldtkTileset.path)
 		tilesetDict[ldtkTileset.uid] = ldtkTileset
-		
+
 	return tilesetDict
 	
 func load_layer_defs(ldtkDefsData):
@@ -70,19 +73,14 @@ func load_layer_defs(ldtkDefsData):
 		ldtkLayer.grid_size = layer["gridSize"]
 		ldtkLayer.tileset_uid = layer["tilesetDefUid"]
 		ldtkLayer.auto_tileset_uid = layer["autoTilesetDefUid"]
-		
+
 		layerDict[ldtkLayer.uid] = ldtkLayer
-		
+
 	return layerDict
 	
-func generate_level(level, layersDef, tilesets, outputDir, extension):
-	var sceneFile = outputDir.plus_file(level["identifier"]+"."+extension)
-	
-	var rootNode = null
-	if ResourceLoader.exists(sceneFile):
-		rootNode = ResourceLoader.load(sceneFile).instance()
-	else:
-		rootNode = Node2D.new()
+func generate_level(level, layersDef, tilesets, outputDir):
+	var sceneFile = outputDir.plus_file(level["identifier"]+".tscn")
+	var rootNode = Node2D.new()
 	rootNode.name = level["identifier"]
 	
 	var entitiesRootNode = rootNode.get_node_or_null("Entities")
@@ -135,9 +133,13 @@ func generate_level(level, layersDef, tilesets, outputDir, extension):
 		var scene = PackedScene.new()
 		scene.pack(rootNode)
 		
-		ResourceSaver.save(sceneFile, scene)
-		return sceneFile
+		var result = ResourceSaver.save(sceneFile, scene)
+		if result == OK:
+			return sceneFile
+		else:
+			print_debug("error saving scene:", result)
 		
+	print_debug("didn't save scene")
 	return null
 			
 func _create_entity(entity, entityNode, rootNode):
@@ -156,14 +158,14 @@ func _create_entity(entity, entityNode, rootNode):
 		sceneFile = sceneFile+".tscn"
 			
 	# Create a new node
-	if entityNode == null:			
+	if entityNode == null:
 		entityNode = _find_and_load_scene(sceneFile)
 		if entityNode == null && node && ClassDB.can_instance(node):
 			entityNode = ClassDB.instance(node)
 			
 		if entityNode == null:
 			push_error("Can not instance node "+node+". Skipping creating node")
-	else:		
+	else:
 		var updatedNode = _find_and_load_scene(sceneFile)
 		if updatedNode == null && node && ClassDB.can_instance(node):
 			updatedNode = ClassDB.instance(node)
@@ -253,7 +255,7 @@ func _create_layer(layer, layersDef, tilesets, tilemap):
 	var tileset = null
 	var layerDef = layersDef[layer["layerDefUid"]]
 	if layerDef.auto_tileset_uid:
-		 tileset = tilesets[layerDef.auto_tileset_uid]
+		tileset = tilesets[layerDef.auto_tileset_uid]
 	elif layerDef.tileset_uid:
 		tileset = tilesets[layerDef.tileset_uid]
 	else:
